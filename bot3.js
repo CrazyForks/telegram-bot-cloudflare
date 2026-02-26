@@ -2,41 +2,49 @@
  * https://github.com/cvzi/telegram-bot-cloudflare
  */
 
-const TOKEN = ENV_BOT_TOKEN // Get it from @BotFather https://core.telegram.org/bots#6-botfather
+
+let TOKEN // Get it from @BotFather https://core.telegram.org/bots#6-botfather
 const WEBHOOK = '/endpoint'
-const SECRET = ENV_BOT_SECRET // A-Z, a-z, 0-9, _ and -
+let jsonInputFiles
+let SECRET
+const bot_url = "https://YourURL.workers.dev" //Fill in with your URL
+const audio_url = "https://YourURL.workers.dev/"
 
 /**
  * Wait for requests to the worker
  */
-addEventListener('fetch', event => {
-  const url = new URL(event.request.url)
-  if (url.pathname === WEBHOOK) {
-    event.respondWith(handleWebhook(event))
-  } else if (url.pathname === '/registerWebhook') {
-    event.respondWith(registerWebhook(event, url, WEBHOOK, SECRET))
-  } else if (url.pathname === '/unRegisterWebhook') {
-    event.respondWith(unRegisterWebhook(event))
-  } else {
-    event.respondWith(new Response('No handler for this request'))
-  }
-})
+export default {
+    async fetch(request, environment, context) {
+        const url = request.url
+        TOKEN =  environment.ENV_BOT_TOKEN
+        SECRET = environment.ENV_BOT_SECRET
+        jsonInputFiles = await environment.NAMESPACE.get('input_files')
+        if (url.endsWith(WEBHOOK)){
+            return await(handleWebhook(request))
+        } else if (url.endsWith ('/registerWebhook')) {
+            return await(registerWebhook(request, url, WEBHOOK, SECRET))
+        } else if (url.endsWith('/unRegisterWebhook')) {
+            return await(unRegisterWebhook(request))
+        } else {
+            return environment.ASSETS.fetch(request);
+        }
+    }
+}
 
 /**
  * Handle requests to WEBHOOK
  * https://core.telegram.org/bots/api#update
  */
-async function handleWebhook (event) {
+export async function handleWebhook (request) {
   // Check secret
-  if (event.request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== SECRET) {
+  if (request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== SECRET) {
     return new Response('Unauthorized', { status: 403 })
   }
 
   // Read request body synchronously
-  const update = await event.request.json()
+  const update = await request.json()
   // Deal with response asynchronously
-  event.waitUntil(onUpdate(update))
-
+  await onUpdate(update)
   return new Response('Ok')
 }
 
@@ -44,10 +52,10 @@ async function handleWebhook (event) {
  * Handle incoming Update
  * https://core.telegram.org/bots/api#update
  */
-async function onUpdate (update) {
+export async function onUpdate (update) {
   if ('message' in update) {
     await onMessage(update.message)
-  } else if ('inline_query' in update) {
+  }else if ('inline_query' in update){
     await onInlineQuery(update.inline_query)
   }
 }
@@ -56,15 +64,15 @@ async function onUpdate (update) {
  * Handle incoming Message
  * https://core.telegram.org/bots/api#message
  */
-function onMessage (message) {
-  return sendPlainText(message.chat.id, 'This is an inline bot')
-}
+export async function onMessage (message) {
+        return sendPlainText(message.chat.id, 'This is an inline bot')
+    }
 
-/**
+  /**
  * Send plain text message
  * https://core.telegram.org/bots/api#sendmessage
  */
-async function sendPlainText (chatId, text) {
+export async function sendPlainText (chatId, text) {
   return (await fetch(apiUrl('sendMessage', {
     chat_id: chatId,
     text
@@ -77,20 +85,22 @@ async function sendPlainText (chatId, text) {
  * This will reply with a voice message but can be changed in type
  * The input file is defined in the environment variables.
  */
-async function onInlineQuery (inlineQuery) {
+export async function onInlineQuery (inlineQuery) {
   const results = []
   const search = inlineQuery.query
-  const jsonInputFiles = await NAMESPACE.get('input_files')
   const parsedInputFiles = JSON.parse(jsonInputFiles)
-  const number = Object.keys(parsedInputFiles).length
+  let number = Object.keys(parsedInputFiles).length
+  if (search == ""){
+    number = 50 // maximum number of audios to show
+  }
   for (let i = 0; i < number; i++) {
     const caption = parsedInputFiles[i][3]
     const title = parsedInputFiles[i][0]
-    if ((caption.toLowerCase().includes(search.toLowerCase())) || title.toLowerCase().includes(search.toLowerCase())) {
+    if ((caption.toLowerCase().includes(search.toLowerCase()))||(title.toLowerCase().includes(search.toLowerCase()))){
       results.push({
         type: 'voice',
         id: crypto.randomUUID(),
-        voice_url: parsedInputFiles[i][1],
+        voice_url: audio_url+parsedInputFiles[i][1],
         title: parsedInputFiles[i][0],
         voice_duration: parsedInputFiles[i][2],
         caption: parsedInputFiles[i][3],
@@ -107,7 +117,7 @@ async function onInlineQuery (inlineQuery) {
  * https://core.telegram.org/bots/api#answerinlinequery
  */
 
-async function SendInlineQuery (inlineQueryId, results) {
+export async function SendInlineQuery (inlineQueryId, results) {
   return (await fetch(apiUrl('answerInlineQuery', {
     inline_query_id: inlineQueryId,
     results
@@ -120,7 +130,7 @@ async function SendInlineQuery (inlineQueryId, results) {
  */
 async function registerWebhook (event, requestUrl, suffix, secret) {
   // https://core.telegram.org/bots/api#setwebhook
-  const webhookUrl = `${requestUrl.protocol}//${requestUrl.hostname}${suffix}`
+  const webhookUrl = bot_url + suffix
   const r = await (await fetch(apiUrl('setWebhook', { url: webhookUrl, secret_token: secret }))).json()
   return new Response('ok' in r && r.ok ? 'Ok' : JSON.stringify(r, null, 2))
 }
@@ -129,7 +139,7 @@ async function registerWebhook (event, requestUrl, suffix, secret) {
  * Remove webhook
  * https://core.telegram.org/bots/api#setwebhook
  */
-async function unRegisterWebhook (event) {
+export async function unRegisterWebhook (event) {
   const r = await (await fetch(apiUrl('setWebhook', { url: '' }))).json()
   return new Response('ok' in r && r.ok ? 'Ok' : JSON.stringify(r, null, 2))
 }
@@ -137,7 +147,7 @@ async function unRegisterWebhook (event) {
 /**
  * Return url to telegram api, optionally with parameters added
  */
-function apiUrl (methodName, params = null) {
+export function apiUrl (methodName, params = null) {
   let query = ''
   if (params) {
     query = '?' + new URLSearchParams(params).toString()
