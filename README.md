@@ -44,7 +44,9 @@ and create [MarkdownV2](https://core.telegram.org/bots/api#markdownv2-style)-for
 
 The file [bot3.js](bot3.js) contains an improved version that replies inline queries with voice messages.
 The voice messages should be stored in OPUS format and .ogg in the cloud you most like.
-The audio files are listed in a JSON array with the following structure in a KV namespace called `NAMESPACE` and with following content under the key `input_files`.
+The audio files are listed in a JSON array with the following structure in a KV namespace called `NAMESPACE` and with following content under the key `input_files`
+Since the migration the file can be a local file in Cloulflare workers but for that it needs to be deployed with wrangler. After deploying via the web
+there is a possibility to import locally the project and work from your computer from then on, getting access to more features.
 
 Go to *Workers & Pages* -> *KV* and create a new namespace. Add a new key `input_files` and store the JSON structure from below with your own audio files.
 
